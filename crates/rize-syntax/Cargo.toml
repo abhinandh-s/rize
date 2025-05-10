@@ -1,0 +1,18 @@
+[package]
+name = "rize-syntax"
+edition = "2024"
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+description.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+keywords.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+miette.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,68 @@
+[workspace.package]
+version = "0.1.0"
+license = "MIT"
+authors = ["Abhinandh S <abhinandhsuby@proton.me>"]
+description = "A Language server for Rize."
+homepage = "https://github.com/abhinandh-s/rize"
+documentation = "https://github.com/abhinandh-s/rize"
+keywords = ["lsp"]
+
+[workspace]
+resolver = "2"
+
+members = [
+  "crates/*"
+  ]
+
+[workspace.dependencies]
+anyhow = "1.0.97"
+thiserror = "2.0"
+miette = "7.6"
+itertools = "0.14.0"
+# chrono = "0.4.40"
+# dashmap = "6.1.0"
+# dirs = "6.0.0"
+# ecow = "0.2.3"
+# fontdb = "0.23.0"
+# hayagriva = "0.8.0"
+# itertools = "0.14.0"
+# oxc_index = "2.0.0"
+# serde = { version = "1.0.217", features = ["derive"] }
+# serde_json = "1.0.140"
+# serde_yml = "0.0.12"
+# regex = "1.11.1"
+# ropey = "1.6.1"
+# typst-syntax = "0.12.0"
+# typst-analyzer-analysis = { path = "./crates/typst-analyzer-analysis", version = "0.1.10" }
+# typstyle-core = "0.12.15"
+# tower-lsp = "0.20.0"
+# thiserror = "2.0.12"
+# tokio = { version = "1.44.1", features = ["full"] }
+# tracing-subscriber = "0.3.19"
+# walkdir = "2.5.0"
+
+[profile.release]
+panic = 'abort'
+codegen-units = 1
+opt-level = 'z'
+lto = true
+debug = "none"
+strip = "symbols"
+debug-assertions = false
+overflow-checks = false
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+unused_labels = "allow"
+unreachable_pub = "deny"
+
+# [workspace.lints.clippy]
+# perf = "deny"
+# unwrap_used = "deny"
+# expect_used = "deny"
+# or_then_unwrap = "deny"
+# panicking_unwrap = "deny"
+# get_unwrap = "deny"
+# enum_glob_use = "deny"
+# redundant_closure = "deny"
+# str_to_string = "deny"

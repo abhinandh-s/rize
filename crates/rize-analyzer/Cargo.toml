@@ -1,0 +1,26 @@
+[package]
+name = "rize-analyzer"
+edition = "2024"
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+description.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+keywords.workspace = true
+default-run = "rize-analyzer" 
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+miette.workspace = true
+dashmap = "6.1.0"
+serde = { version = "1.0", features = ["derive"] }
+rize-syntax = { path = "../rize-syntax" }
+tokio = { version = "1.17", features = ["full"] }
+serde_json = "1.0"
+tracing-subscriber = "0.3"
+tower-lsp = "0.20"
+
+[lints]
+workspace = true
