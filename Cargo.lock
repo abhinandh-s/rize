@@ -608,6 +608,7 @@ dependencies = [
  "anyhow",
  "miette",
  "thiserror",
+ "tower-lsp",
 ]
 
 [[package]]

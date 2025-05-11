@@ -1,5 +1,5 @@
 use dashmap::DashMap;
-use rize_syntax::*;
+use rize_syntax::{lex, SyntaxKind};
 use serde_json::Value;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
@@ -155,7 +155,7 @@ async fn semantic_tokens_full(
 
     for token in tokens {
         let token_start = byte_offset;
-        let token_len = token.text.len();
+        let token_len = token.text.chars().count();
         byte_offset += token_len;
 
         // Map byte offset to line and character position
