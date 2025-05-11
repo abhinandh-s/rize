@@ -1,28 +1,19 @@
 #![allow(clippy::unwrap_used)]
 
+mod kind;
+use std::sync::Arc;
+
+pub use kind::SyntaxKind;
+
 use anyhow::Error;
 use tower_lsp::lsp_types::{
-    SemanticToken, SemanticTokenType, SemanticTokens, SemanticTokensParams, SemanticTokensResult,
+    SemanticToken, SemanticTokenType, SemanticTokens, SemanticTokensResult,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SyntaxKind {
-    Let,
-    Ident,
-    Colon,
-    Type,
-    Equal,
-    StringLiteral,
-    Semicolon,
-    Whitespace,
-    Error,
-    Root,
-    VarDecl,
-    NewLine,
-}
+pub type Token = Arc<TokenData>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Token {
+pub struct TokenData {
     pub kind: SyntaxKind,
     pub text: String,
 }
@@ -33,15 +24,17 @@ pub enum SyntaxElement {
     Node(SyntaxNode),
 }
 
+pub type SyntaxNode = Arc<SyntaxNodeData>;
+
 #[derive(Debug, Clone)]
-pub struct SyntaxNode {
+pub struct SyntaxNodeData {
     pub kind: SyntaxKind,
     pub children: Vec<SyntaxElement>,
 }
 
-impl SyntaxNode {
+impl SyntaxNodeData {
     pub fn new(kind: SyntaxKind, children: Vec<SyntaxElement>) -> Self {
-        SyntaxNode { kind, children }
+        SyntaxNodeData { kind, children }
     }
 
     pub fn tokens(&self) -> Vec<&Token> {
@@ -65,7 +58,7 @@ impl SyntaxNode {
     }
 
     pub fn kind(&self) -> SyntaxKind {
-        self.kind.clone()
+        self.kind
     }
 }
 
@@ -76,38 +69,38 @@ pub fn lex(source: &str) -> Vec<Token> {
     while let Some(&ch) = chars.peek() {
         match ch {
             c if c.is_whitespace() => {
-                tokens.push(Token {
+                tokens.push(Token::new(TokenData {
                     kind: SyntaxKind::Whitespace,
                     text: " ".into(),
-                });
+                }));
                 chars.next();
             }
             ':' => {
-                tokens.push(Token {
+                tokens.push(Token::new(TokenData {
                     kind: SyntaxKind::Colon,
                     text: ":".into(),
-                });
+                }));
                 chars.next();
             }
             '\n' => {
-                tokens.push(Token {
+                tokens.push(Token::new(TokenData {
                     kind: SyntaxKind::NewLine,
                     text: ":".into(),
-                });
+                }));
                 chars.next();
             }
             '=' => {
-                tokens.push(Token {
+                tokens.push(Token::new(TokenData {
                     kind: SyntaxKind::Equal,
                     text: "=".into(),
-                });
+                }));
                 chars.next();
             }
             ';' => {
-                tokens.push(Token {
+                tokens.push(Token::new(TokenData {
                     kind: SyntaxKind::Semicolon,
                     text: ";".into(),
-                });
+                }));
                 chars.next();
             }
             '"' => {
@@ -121,10 +114,10 @@ pub fn lex(source: &str) -> Vec<Token> {
                     value.push(c);
                     chars.next();
                 }
-                tokens.push(Token {
+                tokens.push(Token::new(TokenData {
                     kind: SyntaxKind::StringLiteral,
                     text: value,
-                });
+                }));
             }
             c if c.is_alphabetic() => {
                 let mut ident = String::new();
@@ -141,13 +134,13 @@ pub fn lex(source: &str) -> Vec<Token> {
                     "string" => SyntaxKind::Type,
                     _ => SyntaxKind::Ident,
                 };
-                tokens.push(Token { kind, text: ident });
+                tokens.push(Token::new(TokenData { kind, text: ident }));
             }
             _ => {
-                tokens.push(Token {
+                tokens.push(Token::new(TokenData {
                     kind: SyntaxKind::Error,
                     text: ch.to_string(),
-                });
+                }));
                 chars.next();
             }
         }
@@ -212,13 +205,15 @@ pub fn parse_tokens_to_cst(tokens: &[Token]) -> SyntaxNode {
             }
         }
 
-        decls.push(SyntaxElement::Node(SyntaxNode::new(
-            SyntaxKind::VarDecl,
-            children,
-        )));
+        decls.push(SyntaxElement::Node(
+            SyntaxNodeData {
+                kind: SyntaxKind::VarDecl,
+                children,
+            }.into(),
+        ));
     }
 
-    SyntaxNode::new(SyntaxKind::Root, decls)
+    SyntaxNodeData::new(SyntaxKind::Root, decls).into()
 }
 
 #[derive(Debug)]
@@ -281,8 +276,7 @@ pub fn compile(decls: &[VarDecl]) -> String {
     out
 }
 
-pub fn semantic_tokens_full() -> Result<Option<SemanticTokensResult>, Error> {
-    let text = "let name: string = \"abhi\"";
+pub fn semantic_tokens_full(text: &str) -> Result<Option<SemanticTokensResult>, tower_lsp::jsonrpc::Error> {
     let tokens = lex(text); // Token { kind, text }
     let mut semantic_tokens = vec![];
 
@@ -347,6 +341,68 @@ fn token_type_index(typ: SemanticTokenType) -> u32 {
     }
 }
 
+pub fn provide_semantic_tokens(source: &str) -> Vec<SemanticToken> {
+    let lexed = lex(source);
+    let mut char_offset = 0;
+    let mut current_line = 0;
+    let mut prev_start_char = 0;
+    let mut offset_start = 0;
+    let mut semantic_tokens = vec![];
+
+    for token in lexed {
+        let len = token.text.chars().count();
+        char_offset += len;
+        if token.kind == SyntaxKind::NewLine {
+            current_line += 1;
+        }
+        // Skip unknown tokens
+        let kind = match token.kind {
+            SyntaxKind::Let => SemanticTokenType::KEYWORD,
+            SyntaxKind::Ident => SemanticTokenType::VARIABLE,
+            SyntaxKind::Type => SemanticTokenType::TYPE,
+            SyntaxKind::StringLiteral => SemanticTokenType::STRING,
+            _ => {
+                offset_start += token.text.chars().count();
+                continue;
+            }
+        };
+
+        semantic_tokens.push(SemanticToken {
+            delta_line: current_line as u32,
+            delta_start: offset_start as u32,
+            length: len as u32,
+            token_type: token_type_index(kind),
+            token_modifiers_bitset: 0,
+        });
+
+        offset_start += token.text.chars().count();
+    }
+    semantic_tokens
+}
+
+#[cfg(test)]
+mod qtests {
+    use super::*;
+    use quickcheck::quickcheck;
+
+    quickcheck! {
+        fn parsing_does_not_panic(input: String) -> bool {
+            let tokens = lex(&input);
+            let cst = parse_tokens_to_cst(&tokens);
+            let _ast = lower_to_ast(&cst);
+            true // if we reached here, no panic = pass
+        }
+
+        fn compile_outputs_valid_json(input: String) -> bool {
+            let tokens = lex(&input);
+            let cst = parse_tokens_to_cst(&tokens);
+            let ast = lower_to_ast(&cst);
+            let json = compile(&ast);
+            serde_json::from_str::<serde_json::Value>(&json).is_ok()
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -358,50 +414,50 @@ mod tests {
         assert_eq!(
             lexed,
             vec![
-                Token {
+                Token::new(TokenData {
                     kind: SyntaxKind::Let,
                     text: "let".to_string()
-                },
-                Token {
+                }),
+                Token::new(TokenData {
                     kind: SyntaxKind::Whitespace,
                     text: " ".to_string()
-                },
-                Token {
+                }),
+                Token::new(TokenData {
                     kind: SyntaxKind::Ident,
                     text: "name".to_string()
-                },
-                Token {
+                }),
+                Token::new(TokenData {
                     kind: SyntaxKind::Colon,
                     text: ":".to_string()
-                },
-                Token {
+                }),
+                Token::new(TokenData {
                     kind: SyntaxKind::Whitespace,
                     text: " ".to_string()
-                },
-                Token {
+                }),
+                Token::new(TokenData {
                     kind: SyntaxKind::Type,
                     text: "string".to_string()
-                },
-                Token {
+                }),
+                Token::new(TokenData {
                     kind: SyntaxKind::Whitespace,
                     text: " ".to_string()
-                },
-                Token {
+                }),
+                Token::new(TokenData {
                     kind: SyntaxKind::Equal,
                     text: "=".to_string()
-                },
-                Token {
+                }),
+                Token::new(TokenData {
                     kind: SyntaxKind::Whitespace,
                     text: " ".to_string()
-                },
-                Token {
+                }),
+                Token::new(TokenData {
                     kind: SyntaxKind::StringLiteral,
                     text: "Abhi".to_string()
-                },
-                Token {
+                }),
+                Token::new(TokenData {
                     kind: SyntaxKind::Semicolon,
                     text: ";".to_string()
-                },
+                }),
             ]
         );
         let mut char_offset = 0;
@@ -469,43 +525,4 @@ mod tests {
             assert_eq!(len, 6);
         }
     }
-}
-
-pub fn provide_semantic_tokens(source: &str) -> Vec<SemanticToken> {
-    let lexed = lex(source);
-       let mut char_offset = 0;
-    let mut current_line = 0;
-    let mut prev_start_char = 0;
-    let mut offset_start = 0;
-    let mut semantic_tokens = vec![];
-
-    for token in lexed {
-        let len = token.text.chars().count();
-        char_offset += len;
-        if token.kind == SyntaxKind::NewLine {
-            current_line += 1;
-        }
-        // Skip unknown tokens
-        let kind = match token.kind {
-            SyntaxKind::Let => SemanticTokenType::KEYWORD,
-            SyntaxKind::Ident => SemanticTokenType::VARIABLE,
-            SyntaxKind::Type => SemanticTokenType::TYPE,
-            SyntaxKind::StringLiteral => SemanticTokenType::STRING,
-            _ => {
-                offset_start += token.text.chars().count();
-                continue;
-            }
-        };
-
-        semantic_tokens.push(SemanticToken {
-            delta_line: current_line as u32,
-            delta_start: offset_start as u32,
-            length: len as u32,
-            token_type: token_type_index(kind),
-            token_modifiers_bitset: 0,
-        });
-
-        offset_start += token.text.chars().count();
-    }
-    semantic_tokens
 }

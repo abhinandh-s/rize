@@ -11,8 +11,13 @@ keywords = ["lsp"]
 resolver = "2"
 
 members = [
-  "crates/*"
+  "crates/*",
   ]
+
+exclude = [
+  "crates/rize-syntax/fuzz"
+]
+
 
 [workspace.dependencies]
 anyhow = "1.0.97"

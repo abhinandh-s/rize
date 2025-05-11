@@ -15,5 +15,10 @@ thiserror.workspace = true
 miette.workspace = true
 tower-lsp = "0.20"
 
+[dev-dependencies]
+quickcheck = "1"
+serde_json = "1.0"
+serde = "1"
+
 [lints]
 workspace = true

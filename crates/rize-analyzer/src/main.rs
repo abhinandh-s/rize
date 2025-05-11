@@ -1,5 +1,8 @@
+use std::fmt::Display;
+use std::io::Write;
+
 use dashmap::DashMap;
-use rize_syntax::{lex, SyntaxKind};
+use rize_syntax::{SyntaxKind, lex};
 use serde_json::Value;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
@@ -137,69 +140,38 @@ impl LanguageServer for Backend {
         ])))
     }
 
-    
-async fn semantic_tokens_full(
-    &self,
-    params: SemanticTokensParams,
-) -> Result<Option<SemanticTokensResult>> {
-    let uri = params.text_document.uri.to_string();
-    let doc = self.documents.get(&uri).unwrap();
-    let text = &doc;
+    async fn semantic_tokens_full(
+        &self,
+        params: SemanticTokensParams,
+    ) -> Result<Option<SemanticTokensResult>> {
+        let uri = params.text_document.uri.to_string();
+        let doc = self.documents.get(&uri).unwrap();
+        let text = &doc;
 
-    let tokens = lex(text); // Token { kind, text }
+        let _tokens = lex(text); // Token { kind, text }
 
-    let mut semantic_tokens = vec![];
-    let mut byte_offset = 0;
-    let mut prev_line = 0;
-    let mut prev_start_char = 0;
+        write_log("initalized semantic token full");
 
-    for token in tokens {
-        let token_start = byte_offset;
-        let token_len = token.text.chars().count();
-        byte_offset += token_len;
-
-        // Map byte offset to line and character position
-        let prefix = &text[..token_start];
-        let token_line = prefix.lines().count() - 1;
-        let token_col = prefix.lines().last().map_or(0, |l| l.len());
-
-        // Skip unknown tokens
-        let kind = match token.kind {
-            SyntaxKind::Let => SemanticTokenType::KEYWORD,
-            SyntaxKind::Ident => SemanticTokenType::VARIABLE,
-            SyntaxKind::Type => SemanticTokenType::TYPE,
-            SyntaxKind::StringLiteral => SemanticTokenType::STRING,
-            _ => continue,
-        };
-
-        let delta_line = token_line - prev_line;
-        let delta_start = if delta_line == 0 {
-            token_col - prev_start_char
-        } else {
-            token_col
-        };
-
-        semantic_tokens.push(SemanticToken {
-            delta_line: delta_line as u32,
-            delta_start: delta_start as u32,
-            length: token_len as u32,
-            token_type: token_type_index(kind),
+        let tok = SemanticToken {
+            delta_line: 0,
+            delta_start: 0,
+            length: 20,
+            token_type: 1,
             token_modifiers_bitset: 0,
-        });
-
-        prev_line = token_line;
-        prev_start_char = token_col;
-
-        // Advance by 1 for separating tokens
-        byte_offset += 1;
+        };
+        let mut semantic_tokens = vec![tok];
+        Ok(Some(semantic_tokens))
+        // rize_syntax::semantic_tokens_full(text)
     }
-
-    Ok(Some(SemanticTokensResult::Tokens(SemanticTokens {
-        result_id: None,
-        data: semantic_tokens,
-    })))
 }
 
+pub fn write_log(input: &str) {
+    let mut s = std::fs::OpenOptions::new()
+        .append(true)
+        .create(true)
+        .open("lsp.log")
+        .unwrap();
+    s.write_all(input.as_bytes()).unwrap();
 }
 
 fn token_type_index(typ: SemanticTokenType) -> u32 {
@@ -218,6 +190,9 @@ async fn main() {
 
     let (stdin, stdout) = (tokio::io::stdin(), tokio::io::stdout());
 
-    let (service, socket) = LspService::new(|client| Backend { client, documents: DashMap::new() });
+    let (service, socket) = LspService::new(|client| Backend {
+        client,
+        documents: DashMap::new(),
+    });
     Server::new(stdin, stdout, socket).serve(service).await;
 }
